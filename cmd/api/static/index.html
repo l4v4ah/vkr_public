@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monitoring Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0d1117;
+  --bg2:       #161b22;
+  --bg3:       #1c2128;
+  --border:    #30363d;
+  --border2:   #21262d;
+  --text:      #e6edf3;
+  --text2:     #8b949e;
+  --text3:     #484f58;
+  --accent:    #7c3aed;
+  --accent-l:  #a78bfa;
+  --green:     #3fb950;
+  --yellow:    #d29922;
+  --orange:    #e3672a;
+  --red:       #f85149;
+  --blue:      #388bfd;
+  --cyan:      #39c5cf;
+}
+
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+       background: var(--bg); color: var(--text); height: 100vh;
+       display: flex; flex-direction: column; overflow: hidden; font-size: 13px; }
+
+/* ── Header ─────────────────────────────────────────────────── */
+header {
+  background: var(--bg2); border-bottom: 1px solid var(--border);
+  padding: 0 20px; height: 48px; display: flex; align-items: center;
+  gap: 12px; flex-shrink: 0; z-index: 10;
+}
+.logo { display: flex; align-items: center; gap: 8px; }
+.logo-icon { width: 22px; height: 22px; }
+.logo-text { font-size: 14px; font-weight: 600; color: var(--accent-l); }
+.hdr-sep { width: 1px; height: 20px; background: var(--border); }
+.hdr-ctx { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 6px; }
+.conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text3); flex-shrink: 0; }
+.conn-dot.ok  { background: var(--green);  box-shadow: 0 0 6px var(--green); }
+.conn-dot.err { background: var(--red); }
+.hdr-r { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.hdr-btn { padding: 5px 12px; border-radius: 6px; font-size: 12px; cursor: pointer;
+           border: 1px solid var(--border); background: var(--bg3); color: var(--text2); }
+.hdr-btn:hover { border-color: var(--accent-l); color: var(--accent-l); }
+
+/* ── Layout ─────────────────────────────────────────────────── */
+.layout { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Sidebar ─────────────────────────────────────────────────── */
+aside {
+  width: 220px; flex-shrink: 0; background: var(--bg2);
+  border-right: 1px solid var(--border); display: flex; flex-direction: column;
+}
+.aside-title {
+  padding: 12px 16px 8px; font-size: 11px; font-weight: 600;
+  color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.aside-title button {
+  padding: 2px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent; color: var(--text3);
+}
+.aside-title button:hover { border-color: var(--accent-l); color: var(--accent-l); }
+.servers { flex: 1; overflow-y: auto; }
+.srv-item {
+  padding: 10px 16px; cursor: pointer; border-left: 3px solid transparent;
+  transition: background .1s, border-color .1s;
+}
+.srv-item:hover  { background: var(--bg3); border-left-color: var(--border); }
+.srv-item.active { background: rgba(124,58,237,.12); border-left-color: var(--accent-l); }
+.srv-top { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+.srv-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.srv-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.srv-host { font-size: 11px; color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 5px; }
+.srv-bars { display: flex; gap: 3px; }
+.mini-bar-wrap { flex: 1; height: 3px; background: var(--bg); border-radius: 2px; overflow: hidden; }
+.mini-bar { height: 100%; border-radius: 2px; transition: width .4s; }
+.srv-meta { display: flex; justify-content: space-between; margin-top: 4px; }
+.srv-age { font-size: 10px; color: var(--text3); }
+.srv-age.stale { color: var(--red); }
+.srv-nums { font-size: 10px; color: var(--text3); font-family: monospace; }
+.no-srv { padding: 24px 16px; font-size: 12px; color: var(--text3); text-align: center; line-height: 1.6; }
+
+/* ── Main ─────────────────────────────────────────────────────── */
+main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── Tabs ─────────────────────────────────────────────────────── */
+.tabs { display: flex; background: var(--bg2); border-bottom: 1px solid var(--border);
+        padding: 0 20px; flex-shrink: 0; gap: 4px; }
+.tab { padding: 12px 14px; cursor: pointer; font-size: 12px; font-weight: 500;
+       color: var(--text2); border-bottom: 2px solid transparent;
+       transition: color .15s, border-color .15s; user-select: none; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent-l); border-bottom-color: var(--accent-l); }
+
+/* ── Panels ───────────────────────────────────────────────────── */
+.panels { flex: 1; overflow-y: auto; }
+.panel { display: none; padding: 20px 24px; }
+.panel.active { display: block; }
+
+/* ── Section headers ─────────────────────────────────────────── */
+.sec-hdr { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.sec-title { font-size: 14px; font-weight: 600; }
+.sec-sub { font-size: 12px; color: var(--text2); }
+
+/* ── Overview ─────────────────────────────────────────────────── */
+.ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap: 14px; }
+.ov-card {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 16px; cursor: pointer; transition: border-color .15s, box-shadow .15s;
+}
+.ov-card:hover { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,58,237,.1); }
+.ov-card-hdr { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.ov-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.ov-name { font-size: 13px; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-host { font-size: 11px; color: var(--text3); }
+.ov-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.ov-stat { }
+.ov-stat-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 3px; }
+.ov-stat-val { font-size: 18px; font-weight: 700; font-family: monospace; line-height: 1.1; }
+.ov-bar { height: 3px; background: var(--bg3); border-radius: 2px; margin-top: 5px; overflow: hidden; }
+.ov-bar-fill { height: 100%; border-radius: 2px; transition: width .4s; }
+.ov-footer { display: flex; justify-content: space-between; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border2); }
+.ov-footer-item { font-size: 10px; color: var(--text3); }
+
+/* ── Dashboard ─────────────────────────────────────────────────── */
+.dash-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+.dash-svc { font-size: 16px; font-weight: 700; }
+.dash-host { font-size: 12px; color: var(--text2); }
+.live-pill { display: flex; align-items: center; gap: 5px; padding: 3px 10px;
+             border-radius: 20px; font-size: 11px; font-weight: 600;
+             background: var(--bg3); border: 1px solid var(--border); color: var(--text3); }
+.live-pill.on { background: rgba(63,185,80,.1); border-color: var(--green); color: var(--green); }
+.live-pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 1.4s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px,1fr)); gap: 10px; margin-bottom: 18px; }
+.kpi {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 14px 16px; position: relative; overflow: hidden;
+}
+.kpi-label { font-size: 11px; color: var(--text2); margin-bottom: 6px; }
+.kpi-val { font-size: 28px; font-weight: 700; font-family: monospace; line-height: 1; color: var(--accent-l); }
+.kpi-val.warn { color: var(--orange); }
+.kpi-val.crit { color: var(--red); }
+.kpi-unit { font-size: 11px; color: var(--text3); margin-top: 4px; }
+.kpi-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; }
+.kpi-bar-fill { height: 100%; transition: width .4s; }
+
+.charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media(max-width:860px) { .charts { grid-template-columns: 1fr; } }
+.chart-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+.chart-label { font-size: 11px; font-weight: 600; color: var(--text2); margin-bottom: 10px; }
+.chart-wrap { position: relative; height: 150px; }
+
+/* ── Controls ─────────────────────────────────────────────────── */
+.controls {
+  display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; align-items: flex-end;
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px;
+}
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .4px; font-weight: 500; }
+input[type=text], input[type=datetime-local], select {
+  background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  padding: 6px 10px; border-radius: 6px; font-size: 12px; outline: none; font-family: inherit;
+}
+input[type=text]:focus, input[type=datetime-local]:focus, select:focus { border-color: var(--accent-l); }
+input[type=text]          { width: 160px; }
+input[type=datetime-local]{ width: 180px; }
+.btn { padding: 7px 16px; border-radius: 6px; font-size: 12px; font-weight: 600;
+       cursor: pointer; border: none; background: var(--accent); color: #fff; }
+.btn:hover { background: #6d28d9; }
+.btn-sec { background: var(--bg3); border: 1px solid var(--border); color: var(--text2); }
+.btn-sec:hover { border-color: var(--accent-l); color: var(--accent-l); }
+.st { font-size: 11px; color: var(--text3); align-self: center; }
+.st.ok  { color: var(--green); }
+.st.err { color: var(--red); }
+.ctrl-sep { width: 1px; height: 28px; background: var(--border); align-self: center; }
+.auto-badge { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text2); cursor: pointer; user-select: none; }
+.auto-badge input { cursor: pointer; accent-color: var(--accent-l); }
+
+/* ── Table ─────────────────────────────────────────────────────── */
+.table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead { background: var(--bg2); }
+th { padding: 9px 14px; text-align: left; color: var(--text3); font-weight: 600;
+     font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
+     border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 8px 14px; border-bottom: 1px solid var(--border2); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(255,255,255,.02); }
+.mono { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px; color: var(--text2); }
+.val  { font-family: 'SF Mono', 'Fira Code', monospace; color: var(--accent-l); }
+.truncate { max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.empty { text-align: center; padding: 48px; color: var(--text3); font-size: 13px; }
+
+/* ── Badges ───────────────────────────────────────────────────── */
+.badge { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px;
+         font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; }
+.lvl-error { background: rgba(248,81,73,.15); color: #ffa198; border: 1px solid rgba(248,81,73,.3); }
+.lvl-warn  { background: rgba(210,153,34,.15); color: #e3b341; border: 1px solid rgba(210,153,34,.3); }
+.lvl-info  { background: rgba(56,139,253,.12); color: #79c0ff; border: 1px solid rgba(56,139,253,.25); }
+.lvl-ok    { background: rgba(63,185,80,.12);  color: #56d364; border: 1px solid rgba(63,185,80,.25); }
+
+/* ── Trace tree ───────────────────────────────────────────────── */
+.trace-info { font-size: 12px; color: var(--text2); margin-bottom: 12px; padding: 10px 14px;
+              background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+              display: flex; gap: 20px; flex-wrap: wrap; }
+.trace-info b { color: var(--text); }
+.span-row { display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+            border-bottom: 1px solid var(--border2); font-size: 12px; }
+.span-row:last-child { border-bottom: none; }
+.span-row:hover { background: rgba(255,255,255,.02); }
+.span-indent { font-family: monospace; white-space: pre; color: var(--text3); font-size: 11px; }
+.span-name { font-weight: 500; flex: 1; }
+.span-svc  { font-size: 11px; color: var(--text3); margin-right: 4px; }
+.span-dur  { font-family: monospace; font-size: 11px; color: var(--accent-l); min-width: 60px; text-align: right; }
+.span-attrs { font-size: 10px; color: var(--text3); margin-top: 2px; }
+
+/* Clickable trace ID */
+.trace-link { color: var(--accent-l); cursor: pointer; font-family: monospace; font-size: 11px; text-decoration: none; }
+.trace-link:hover { text-decoration: underline; }
+
+/* ── Settings ─────────────────────────────────────────────────── */
+.settings-card {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 20px 24px; max-width: 520px;
+}
+.settings-card + .settings-card { margin-top: 16px; }
+.settings-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.settings-desc  { font-size: 12px; color: var(--text2); margin-bottom: 18px; line-height: 1.5; }
+.thr-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; }
+.thr-row:last-of-type { margin-bottom: 0; }
+.thr-label { font-size: 11px; font-weight: 600; color: var(--text2); display: flex; justify-content: space-between; }
+.thr-label span { font-family: monospace; font-size: 13px; }
+.thr-track { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+input[type=range] { flex: 1; height: 4px; cursor: pointer; }
+
+/* ── Auth overlay ─────────────────────────────────────────────── */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: flex;
+           align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(4px); }
+.auth-card {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 14px;
+  padding: 32px; width: 360px; display: flex; flex-direction: column; gap: 14px;
+}
+.auth-card h2 { font-size: 16px; font-weight: 700; }
+.auth-card p  { font-size: 12px; color: var(--text2); line-height: 1.5; }
+.auth-card input { background: var(--bg); border: 1px solid var(--border); color: var(--text);
+                   padding: 9px 12px; border-radius: 7px; font-size: 13px; outline: none; width: 100%; }
+.auth-card input:focus { border-color: var(--accent-l); }
+.auth-card button { padding: 10px; border-radius: 7px; font-size: 13px; font-weight: 600;
+                    cursor: pointer; border: none; background: var(--accent); color: #fff; }
+.auth-card button:hover { background: #6d28d9; }
+
+/* ── Utility ──────────────────────────────────────────────────── */
+.color-ok     { color: var(--green); }
+.color-warn   { color: var(--orange); }
+.color-crit   { color: var(--red); }
+.color-accent { color: var(--accent-l); }
+</style>
+</head>
+<body>
+
+<!-- Auth overlay -->
+<div class="overlay" id="authOverlay">
+  <div class="auth-card">
+    <h2>Monitoring Dashboard</h2>
+    <p>Введите API-ключ для подключения. Оставьте пустым, если аутентификация отключена.</p>
+    <input type="password" id="apiKeyInput" placeholder="X-API-Key" onkeydown="if(event.key==='Enter')saveKey()">
+    <button onclick="saveKey()">Подключиться</button>
+  </div>
+</div>
+
+<!-- Header -->
+<header>
+  <div class="logo">
+    <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent-l)">
+      <path d="M3 12h4l3-8 4 16 3-8h4"/>
+    </svg>
+    <span class="logo-text">Monitoring</span>
+  </div>
+  <div class="hdr-sep"></div>
+  <div class="hdr-ctx">
+    <div class="conn-dot" id="connDot"></div>
+    <span id="hdrCtx">Не подключено</span>
+  </div>
+  <div class="hdr-r">
+    <span style="font-size:11px;color:var(--text3)" id="hdrTime"></span>
+    <button class="hdr-btn" onclick="logout()">Сменить ключ</button>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside>
+    <div class="aside-title">
+      Серверы
+      <button onclick="refreshServers()">↻</button>
+    </div>
+    <div class="servers" id="serverList">
+      <div class="no-srv">Ожидание данных…</div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main>
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('overview')">Обзор</div>
+      <div class="tab" onclick="switchTab('dashboard')">Дашборд</div>
+      <div class="tab" onclick="switchTab('metrics')">Метрики</div>
+      <div class="tab" onclick="switchTab('logs')">Логи</div>
+      <div class="tab" onclick="switchTab('traces')">Трейсы</div>
+      <div class="tab" onclick="switchTab('settings')">Настройки</div>
+    </div>
+
+    <div class="panels">
+
+      <!-- ─────────────────── OVERVIEW ─────────────────── -->
+      <div class="panel active" id="panel-overview">
+        <div class="sec-hdr">
+          <span class="sec-title">Все серверы</span>
+          <span class="sec-sub" id="ov-count"></span>
+        </div>
+        <div class="ov-grid" id="ovGrid">
+          <div class="empty">Ожидание серверов…</div>
+        </div>
+      </div>
+
+      <!-- ─────────────────── DASHBOARD ─────────────────── -->
+      <div class="panel" id="panel-dashboard">
+        <div class="dash-bar">
+          <span class="dash-svc" id="d-title">—</span>
+          <span class="dash-host" id="d-host"></span>
+          <div class="live-pill" id="livePill">
+            <div class="live-pulse" id="livePulse" style="display:none"></div>
+            <span id="liveText">Отключено</span>
+          </div>
+          <span style="margin-left:auto;font-size:11px;color:var(--text3)" id="d-updated"></span>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi">
+            <div class="kpi-label">CPU</div>
+            <div class="kpi-val" id="s-cpu">—</div>
+            <div class="kpi-unit">%</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-cpu-bar" style="background:var(--accent-l)"></div></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Память</div>
+            <div class="kpi-val" id="s-mem">—</div>
+            <div class="kpi-unit">%</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-mem-bar" style="background:var(--green)"></div></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Диск</div>
+            <div class="kpi-val" id="s-disk">—</div>
+            <div class="kpi-unit">%</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-disk-bar" style="background:var(--orange)"></div></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Сеть ↓</div>
+            <div class="kpi-val" id="s-netr" style="color:var(--blue)">—</div>
+            <div class="kpi-unit">KB/s</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-netr-bar" style="background:var(--blue)"></div></div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Сеть ↑</div>
+            <div class="kpi-val" id="s-nets" style="color:var(--cyan)">—</div>
+            <div class="kpi-unit">KB/s</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-nets-bar" style="background:var(--cyan)"></div></div>
+          </div>
+        </div>
+
+        <div class="charts">
+          <div class="chart-card">
+            <div class="chart-label">CPU %</div>
+            <div class="chart-wrap"><canvas id="c-cpu"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-label">Память %</div>
+            <div class="chart-wrap"><canvas id="c-mem"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-label">Сеть KB/s</div>
+            <div class="chart-wrap"><canvas id="c-net"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-label">Диск %</div>
+            <div class="chart-wrap"><canvas id="c-disk"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─────────────────── METRICS ─────────────────── -->
+      <div class="panel" id="panel-metrics">
+        <div class="controls">
+          <div class="field">
+            <label>Сервис</label>
+            <input type="text" id="m-service" value="host-agent" placeholder="host-agent">
+          </div>
+          <div class="field">
+            <label>С</label>
+            <input type="datetime-local" id="m-from">
+          </div>
+          <div class="field">
+            <label>По</label>
+            <input type="datetime-local" id="m-to">
+          </div>
+          <div class="field">
+            <label>Фильтр метрики</label>
+            <input type="text" id="m-filter" placeholder="cpu, mem…" style="width:130px">
+          </div>
+          <button class="btn" onclick="loadMetrics()">Получить</button>
+          <div class="ctrl-sep"></div>
+          <label class="auto-badge">
+            <input type="checkbox" id="m-auto"> Авто-обновление
+          </label>
+          <span class="st" id="m-st"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Время</th><th>Сервис</th><th>Метрика</th><th>Значение</th><th>Метки</th>
+            </tr></thead>
+            <tbody id="m-body"><tr><td colspan="5" class="empty">Нажмите «Получить»</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ─────────────────── LOGS ─────────────────── -->
+      <div class="panel" id="panel-logs">
+        <div class="controls">
+          <div class="field">
+            <label>Сервис</label>
+            <input type="text" id="l-service" placeholder="Любой">
+          </div>
+          <div class="field">
+            <label>Уровень</label>
+            <select id="l-level">
+              <option value="">Все</option>
+              <option>info</option>
+              <option>warn</option>
+              <option>error</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Поиск</label>
+            <input type="text" id="l-search" placeholder="текст сообщения…" style="width:160px">
+          </div>
+          <div class="field">
+            <label>Лимит</label>
+            <select id="l-limit">
+              <option>50</option><option selected>100</option><option>200</option><option>500</option>
+            </select>
+          </div>
+          <button class="btn" onclick="loadLogs()">Получить</button>
+          <div class="ctrl-sep"></div>
+          <label class="auto-badge">
+            <input type="checkbox" id="l-auto"> Авто-обновление
+          </label>
+          <span class="st" id="l-st"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Время</th><th>Уровень</th><th>Сервис</th><th>Сообщение</th><th>Trace ID</th>
+            </tr></thead>
+            <tbody id="l-body"><tr><td colspan="5" class="empty">Нажмите «Получить»</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ─────────────────── TRACES ─────────────────── -->
+      <div class="panel" id="panel-traces">
+        <div class="controls">
+          <div class="field">
+            <label>Trace ID</label>
+            <input type="text" id="t-id" style="width:340px;font-family:monospace" placeholder="Вставьте trace ID или нажмите ссылку в логах…">
+          </div>
+          <button class="btn" onclick="loadTrace()">Показать</button>
+          <span class="st" id="t-st"></span>
+        </div>
+        <div id="t-body">
+          <div class="empty">Введите Trace ID или перейдите из вкладки Логи</div>
+        </div>
+      </div>
+
+      <!-- ─────────────────── SETTINGS ─────────────────── -->
+      <div class="panel" id="panel-settings">
+
+        <div class="settings-card">
+          <div class="settings-title">Пороги алертов</div>
+          <div class="settings-desc">
+            Агенты опрашивают эти значения каждые 30 с и отправляют
+            <span class="badge lvl-warn">warn</span> лог при превышении.
+            Изменения вступают в силу в течение минуты.
+          </div>
+
+          <div class="thr-row">
+            <div class="thr-label">
+              CPU <span id="thr-cpu-v" style="color:var(--accent-l)">85%</span>
+            </div>
+            <div class="thr-track">
+              <span style="font-size:10px;color:var(--text3);width:20px">1%</span>
+              <input type="range" id="thr-cpu" min="1" max="100" value="85"
+                style="accent-color:var(--accent-l)"
+                oninput="document.getElementById('thr-cpu-v').textContent=this.value+'%'">
+              <span style="font-size:10px;color:var(--text3);width:28px">100%</span>
+            </div>
+          </div>
+
+          <div class="thr-row">
+            <div class="thr-label">
+              Память <span id="thr-mem-v" style="color:var(--green)">90%</span>
+            </div>
+            <div class="thr-track">
+              <span style="font-size:10px;color:var(--text3);width:20px">1%</span>
+              <input type="range" id="thr-mem" min="1" max="100" value="90"
+                style="accent-color:var(--green)"
+                oninput="document.getElementById('thr-mem-v').textContent=this.value+'%'">
+              <span style="font-size:10px;color:var(--text3);width:28px">100%</span>
+            </div>
+          </div>
+
+          <div class="thr-row">
+            <div class="thr-label">
+              Диск <span id="thr-disk-v" style="color:var(--orange)">90%</span>
+            </div>
+            <div class="thr-track">
+              <span style="font-size:10px;color:var(--text3);width:20px">1%</span>
+              <input type="range" id="thr-disk" min="1" max="100" value="90"
+                style="accent-color:var(--orange)"
+                oninput="document.getElementById('thr-disk-v').textContent=this.value+'%'">
+              <span style="font-size:10px;color:var(--text3);width:28px">100%</span>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:12px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border2)">
+            <button class="btn" onclick="saveThresholds()">Сохранить</button>
+            <span class="st" id="thr-st"></span>
+          </div>
+        </div>
+
+        <div class="settings-card" style="margin-top:16px">
+          <div class="settings-title">Подключение</div>
+          <div class="settings-desc">Смените API-ключ для подключения к другому серверу мониторинга.</div>
+          <button class="btn btn-sec" onclick="logout()">Сменить API-ключ</button>
+        </div>
+
+      </div>
+
+    </div><!-- /panels -->
+  </main>
+</div>
+
+<script>
+// ── Auth ─────────────────────────────────────────────────────────────────────
+let API_KEY = localStorage.getItem('apiKey');
+if (API_KEY !== null) document.getElementById('authOverlay').style.display = 'none';
+
+function saveKey() {
+  API_KEY = document.getElementById('apiKeyInput').value;
+  localStorage.setItem('apiKey', API_KEY);
+  document.getElementById('authOverlay').style.display = 'none';
+  boot();
+}
+function logout() { localStorage.removeItem('apiKey'); location.reload(); }
+
+// ── Tabs ─────────────────────────────────────────────────────────────────────
+const TAB_NAMES = ['overview','dashboard','metrics','logs','traces','settings'];
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', TAB_NAMES[i] === name));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  if (name === 'settings') loadThresholds();
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function hdrs() { return API_KEY ? {'X-API-Key': API_KEY} : {}; }
+async function apiFetch(url) {
+  const r = await fetch(url, {headers: hdrs()});
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+function apiQS() { return API_KEY ? '&api_key=' + encodeURIComponent(API_KEY) : ''; }
+
+function fmtTime(ts) {
+  if (!ts) return '—';
+  return new Date(ts).toLocaleTimeString('ru', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+function fmtDateTime(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  return d.toLocaleDateString('ru', {month:'2-digit', day:'2-digit'}) + ' ' +
+         d.toLocaleTimeString('ru', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+function fmtAgo(ts) {
+  const sec = Math.floor((Date.now() - new Date(ts)) / 1000);
+  if (sec < 5)    return 'сейчас';
+  if (sec < 60)   return sec + 'с назад';
+  if (sec < 3600) return Math.floor(sec/60) + 'м назад';
+  return Math.floor(sec/3600) + 'ч назад';
+}
+function fmtDur(a, b) {
+  if (!a || !b) return '—';
+  const ms = new Date(b) - new Date(a);
+  return ms < 1000 ? ms + 'мс' : (ms/1000).toFixed(2) + 'с';
+}
+function toLocalDT(d) {
+  return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+}
+function toISO(s) { return s ? new Date(s).toISOString() : null; }
+
+function srvColor(cpu, mem, lastSeen) {
+  const stale = (Date.now() - new Date(lastSeen)) > 30000;
+  if (stale)              return 'var(--red)';
+  if (cpu > 90 || mem > 90) return 'var(--red)';
+  if (cpu > 70 || mem > 70) return 'var(--orange)';
+  return 'var(--green)';
+}
+function colorClass(v, w, c) { return v >= c ? 'crit' : v >= w ? 'warn' : ''; }
+
+function setKPI(id, barId, v, w, c) {
+  const el = document.getElementById(id);
+  const bar = document.getElementById(barId);
+  el.textContent = typeof v === 'number' ? v.toFixed(1) : v;
+  el.className = 'kpi-val ' + colorClass(v, w, c);
+  if (bar) bar.style.width = Math.min(v, 100) + '%';
+}
+
+// ── Clock ────────────────────────────────────────────────────────────────────
+setInterval(() => {
+  document.getElementById('hdrTime').textContent =
+    new Date().toLocaleTimeString('ru', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}, 1000);
+
+// ── Charts ───────────────────────────────────────────────────────────────────
+const CHART_OPTS = (max) => ({
+  responsive: true, maintainAspectRatio: false, animation: false,
+  plugins: { legend: { display: true, labels: { color: '#8b949e', font:{size:10}, boxWidth:10, padding:10 } } },
+  scales: {
+    x: { ticks: {color:'#484f58', font:{size:10}, maxTicksLimit:6}, grid: {color:'#1c2128'} },
+    y: { ticks: {color:'#484f58', font:{size:10}}, grid: {color:'#1c2128'}, min: 0, ...(max ? {max} : {}) }
+  }
+});
+const MAX_PTS = 60;
+function makeChart(id, datasets, max) {
+  return new Chart(document.getElementById(id), {
+    type: 'line',
+    data: { labels: [], datasets: datasets.map(d => ({
+      label: d.label, data: [], borderColor: d.color,
+      backgroundColor: d.color + '18', borderWidth: 1.5,
+      pointRadius: 1, fill: datasets.length === 1, tension: 0.35
+    }))},
+    options: CHART_OPTS(max)
+  });
+}
+const charts = {
+  cpu:  makeChart('c-cpu',  [{label:'CPU %',  color:'#a78bfa'}], 100),
+  mem:  makeChart('c-mem',  [{label:'Mem %',  color:'#3fb950'}], 100),
+  net:  makeChart('c-net',  [{label:'↓ recv', color:'#388bfd'}, {label:'↑ sent', color:'#f472b6'}]),
+  disk: makeChart('c-disk', [{label:'Disk %', color:'#e3672a'}], 100),
+};
+function pushPt(chart, label, ...vals) {
+  chart.data.labels.push(label);
+  vals.forEach((v, i) => chart.data.datasets[i].data.push(+v.toFixed(2)));
+  if (chart.data.labels.length > MAX_PTS) {
+    chart.data.labels.shift();
+    chart.data.datasets.forEach(d => d.data.shift());
+  }
+  chart.update('none');
+}
+
+// ── Server list ───────────────────────────────────────────────────────────────
+let servers = {};
+let srvES = null;
+let selectedSrv = null;
+
+function startServerStream() {
+  if (srvES) srvES.close();
+  const url = '/api/v1/stream/services?' + apiQS().slice(1);
+  srvES = new EventSource(url);
+  srvES.addEventListener('services', e => {
+    const list = JSON.parse(e.data) || [];
+    list.forEach(s => servers[s.ServiceName] = s);
+    renderSidebar();
+    renderOverview();
+    document.getElementById('connDot').className = 'conn-dot ok';
+    document.getElementById('hdrCtx').textContent = Object.keys(servers).length + ' сервер(ов)';
+  });
+  srvES.onerror = () => {
+    document.getElementById('connDot').className = 'conn-dot err';
+    document.getElementById('hdrCtx').textContent = 'Ошибка подключения';
+  };
+}
+
+function refreshServers() {
+  apiFetch('/api/v1/services').then(d => {
+    (d.data||[]).forEach(s => servers[s.ServiceName] = s);
+    renderSidebar(); renderOverview();
+  }).catch(() => {});
+}
+
+function renderSidebar() {
+  const list = document.getElementById('serverList');
+  const arr = Object.values(servers);
+  if (!arr.length) { list.innerHTML = '<div class="no-srv">Нет серверов</div>'; return; }
+  list.innerHTML = arr.map(s => {
+    const color = srvColor(s.CPU, s.Mem, s.LastSeen);
+    const stale = (Date.now() - new Date(s.LastSeen)) > 30000;
+    const active = selectedSrv === s.ServiceName ? 'active' : '';
+    return `<div class="srv-item ${active}" onclick="selectServer('${s.ServiceName}')">
+      <div class="srv-top">
+        <div class="srv-dot" style="background:${color};box-shadow:0 0 5px ${color}30"></div>
+        <span class="srv-name">${s.ServiceName}</span>
+      </div>
+      <div class="srv-host">${s.Host || '—'}</div>
+      <div class="srv-bars">
+        <div class="mini-bar-wrap" title="CPU ${s.CPU.toFixed(1)}%">
+          <div class="mini-bar" style="width:${Math.min(s.CPU,100)}%;background:var(--accent-l)"></div>
+        </div>
+        <div class="mini-bar-wrap" title="Mem ${s.Mem.toFixed(1)}%">
+          <div class="mini-bar" style="width:${Math.min(s.Mem,100)}%;background:var(--green)"></div>
+        </div>
+        <div class="mini-bar-wrap" title="Disk ${s.Disk.toFixed(1)}%">
+          <div class="mini-bar" style="width:${Math.min(s.Disk,100)}%;background:var(--orange)"></div>
+        </div>
+      </div>
+      <div class="srv-meta">
+        <span class="srv-age ${stale ? 'stale' : ''}">${fmtAgo(s.LastSeen)}</span>
+        <span class="srv-nums">${s.CPU.toFixed(0)}% / ${s.Mem.toFixed(0)}%</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderOverview() {
+  const grid = document.getElementById('ovGrid');
+  const arr = Object.values(servers);
+  document.getElementById('ov-count').textContent = arr.length ? arr.length + ' найдено' : '';
+  if (!arr.length) { grid.innerHTML = '<div class="empty">Серверы не обнаружены</div>'; return; }
+  grid.innerHTML = arr.map(s => {
+    const color = srvColor(s.CPU, s.Mem, s.LastSeen);
+    const stale = (Date.now() - new Date(s.LastSeen)) > 30000;
+    const cpuCls  = colorClass(s.CPU, 70, 90);
+    const memCls  = colorClass(s.Mem, 70, 90);
+    const diskCls = colorClass(s.Disk, 80, 95);
+    return `<div class="ov-card" onclick="selectServer('${s.ServiceName}')">
+      <div class="ov-card-hdr">
+        <div class="ov-dot" style="background:${color};box-shadow:0 0 6px ${color}50"></div>
+        <span class="ov-name">${s.ServiceName}</span>
+        <span class="ov-host">${s.Host||''}</span>
+      </div>
+      <div class="ov-stats">
+        <div class="ov-stat">
+          <div class="ov-stat-label">CPU</div>
+          <div class="ov-stat-val color-accent ${cpuCls}">${s.CPU.toFixed(1)}<span style="font-size:11px;font-weight:400">%</span></div>
+          <div class="ov-bar"><div class="ov-bar-fill" style="width:${Math.min(s.CPU,100)}%;background:var(--accent-l)"></div></div>
+        </div>
+        <div class="ov-stat">
+          <div class="ov-stat-label">Память</div>
+          <div class="ov-stat-val ${memCls}" style="color:var(--green)">${s.Mem.toFixed(1)}<span style="font-size:11px;font-weight:400">%</span></div>
+          <div class="ov-bar"><div class="ov-bar-fill" style="width:${Math.min(s.Mem,100)}%;background:var(--green)"></div></div>
+        </div>
+        <div class="ov-stat">
+          <div class="ov-stat-label">Диск</div>
+          <div class="ov-stat-val ${diskCls}" style="color:var(--orange)">${s.Disk.toFixed(1)}<span style="font-size:11px;font-weight:400">%</span></div>
+          <div class="ov-bar"><div class="ov-bar-fill" style="width:${Math.min(s.Disk,100)}%;background:var(--orange)"></div></div>
+        </div>
+      </div>
+      <div class="ov-footer">
+        <span class="ov-footer-item" style="${stale?'color:var(--red)':''}">${fmtAgo(s.LastSeen)}</span>
+        <span class="ov-footer-item">${s.Host||''}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+let metricES = null;
+
+function selectServer(name) {
+  selectedSrv = name;
+  renderSidebar();
+  document.getElementById('m-service').value = name;
+  document.getElementById('l-service').value = name;
+  switchTab('dashboard');
+  openMetricStream(name);
+}
+
+function openMetricStream(svc) {
+  if (metricES) metricES.close();
+  Object.values(charts).forEach(ch => {
+    ch.data.labels = [];
+    ch.data.datasets.forEach(d => d.data = []);
+    ch.update('none');
+  });
+  document.getElementById('d-title').textContent = svc;
+  const s = servers[svc];
+  document.getElementById('d-host').textContent = s?.Host ? '@ ' + s.Host : '';
+
+  const pill = document.getElementById('livePill');
+  const pulse = document.getElementById('livePulse');
+  const txt = document.getElementById('liveText');
+  pill.className = 'live-pill';
+  txt.textContent = 'Подключение…';
+  pulse.style.display = 'none';
+
+  metricES = new EventSource(`/api/v1/stream?service=${encodeURIComponent(svc)}${apiQS()}`);
+  metricES.addEventListener('snapshot', e => processRows(JSON.parse(e.data), true));
+  metricES.addEventListener('update',   e => processRows(JSON.parse(e.data), false));
+  metricES.onopen = () => {
+    pill.className = 'live-pill on';
+    pulse.style.display = 'block';
+    txt.textContent = 'Live';
+    document.getElementById('connDot').className = 'conn-dot ok';
+  };
+  metricES.onerror = () => {
+    pill.className = 'live-pill';
+    pulse.style.display = 'none';
+    txt.textContent = 'Переподключение…';
+  };
+}
+
+function processRows(rows, isSnapshot) {
+  if (!rows?.length) return;
+  const sorted = [...rows].sort((a,b) => new Date(a.Timestamp)-new Date(b.Timestamp));
+
+  if (isSnapshot) {
+    const seen = new Set();
+    for (const r of sorted) {
+      const key = r.MetricName + '|' + r.Timestamp.slice(0,19);
+      if (!seen.has(key)) { seen.add(key); addToCharts(r); }
+    }
+  } else {
+    const latest = {};
+    for (const r of sorted) latest[r.MetricName] = r;
+    Object.values(latest).forEach(r => addToCharts(r));
+  }
+
+  const last = {};
+  for (const r of sorted) last[r.MetricName] = r.Value;
+
+  if ('cpu_usage_percent'      in last) setKPI('s-cpu',  'kpi-cpu-bar',  last.cpu_usage_percent,  70, 90);
+  if ('mem_usage_percent'      in last) setKPI('s-mem',  'kpi-mem-bar',  last.mem_usage_percent,  70, 90);
+  if ('disk_usage_percent'     in last) setKPI('s-disk', 'kpi-disk-bar', last.disk_usage_percent, 80, 95);
+  if ('net_bytes_recv_per_sec' in last) {
+    const v = (last.net_bytes_recv_per_sec/1024).toFixed(1);
+    document.getElementById('s-netr').textContent = v;
+    document.getElementById('kpi-netr-bar').style.width = Math.min(last.net_bytes_recv_per_sec/1024/100*10, 100) + '%';
+  }
+  if ('net_bytes_sent_per_sec' in last) {
+    document.getElementById('s-nets').textContent = (last.net_bytes_sent_per_sec/1024).toFixed(1);
+  }
+  document.getElementById('d-updated').textContent = 'обновлено ' + fmtTime(new Date());
+}
+
+function addToCharts(r) {
+  const label = fmtTime(r.Timestamp);
+  switch (r.MetricName) {
+    case 'cpu_usage_percent':  pushPt(charts.cpu,  label, r.Value); break;
+    case 'mem_usage_percent':  pushPt(charts.mem,  label, r.Value); break;
+    case 'disk_usage_percent': pushPt(charts.disk, label, r.Value); break;
+    case 'net_bytes_recv_per_sec':
+      charts.net._recv = {label, v: r.Value/1024}; break;
+    case 'net_bytes_sent_per_sec':
+      if (charts.net._recv) pushPt(charts.net, charts.net._recv.label, charts.net._recv.v, r.Value/1024);
+      break;
+  }
+}
+
+// ── Metrics ───────────────────────────────────────────────────────────────────
+(function initDates() {
+  const now = new Date();
+  document.getElementById('m-from').value = toLocalDT(new Date(now - 3600000));
+  document.getElementById('m-to').value   = toLocalDT(now);
+})();
+
+let mAutoTimer = null;
+document.getElementById('m-auto').addEventListener('change', function() {
+  clearInterval(mAutoTimer);
+  if (this.checked) mAutoTimer = setInterval(loadMetrics, 15000);
+});
+
+async function loadMetrics() {
+  const svc    = document.getElementById('m-service').value.trim();
+  const filter = document.getElementById('m-filter').value.trim().toLowerCase();
+  const st = document.getElementById('m-st');
+  const tb = document.getElementById('m-body');
+  if (!svc) { st.textContent='Укажите сервис'; st.className='st err'; return; }
+  let url = `/api/v1/metrics?service=${encodeURIComponent(svc)}`;
+  const f = toISO(document.getElementById('m-from').value);
+  const t = toISO(document.getElementById('m-to').value);
+  if (f) url += `&from=${encodeURIComponent(f)}`;
+  if (t) url += `&to=${encodeURIComponent(t)}`;
+  st.textContent = 'Загрузка…'; st.className = 'st';
+  try {
+    const data = await apiFetch(url);
+    let rows = data.data || [];
+    if (filter) rows = rows.filter(r => r.MetricName?.toLowerCase().includes(filter));
+    tb.innerHTML = rows.length
+      ? rows.map(r => `<tr>
+          <td class="mono">${fmtDateTime(r.Timestamp)}</td>
+          <td>${r.ServiceName}</td>
+          <td class="mono">${r.MetricName}</td>
+          <td class="val">${typeof r.Value==='number' ? r.Value.toFixed(4) : r.Value}</td>
+          <td>${Object.entries(r.Labels||{}).map(([k,v])=>`<span class="mono" style="color:var(--text3)">${k}=</span><span class="mono">${v}</span>`).join(' ')}</td>
+        </tr>`).join('')
+      : `<tr><td colspan="5" class="empty">Нет данных</td></tr>`;
+    st.textContent = `${rows.length} строк`; st.className = 'st ok';
+  } catch(e) {
+    st.textContent = e.message; st.className = 'st err';
+    tb.innerHTML = `<tr><td colspan="5" class="empty">${e.message}</td></tr>`;
+  }
+}
+
+// ── Logs ──────────────────────────────────────────────────────────────────────
+let lAutoTimer = null;
+document.getElementById('l-auto').addEventListener('change', function() {
+  clearInterval(lAutoTimer);
+  if (this.checked) lAutoTimer = setInterval(loadLogs, 10000);
+});
+
+function openTrace(id) {
+  document.getElementById('t-id').value = id;
+  switchTab('traces');
+  loadTrace();
+}
+
+async function loadLogs() {
+  const svc    = document.getElementById('l-service').value.trim();
+  const level  = document.getElementById('l-level').value;
+  const search = document.getElementById('l-search').value.trim().toLowerCase();
+  const limit  = document.getElementById('l-limit').value;
+  const st = document.getElementById('l-st');
+  const tb = document.getElementById('l-body');
+  if (!svc && !level) { st.textContent='Укажите сервис или уровень'; st.className='st err'; return; }
+  let url = `/api/v1/logs?limit=${limit}`;
+  if (svc)   url += `&service=${encodeURIComponent(svc)}`;
+  if (level) url += `&level=${level}`;
+  st.textContent = 'Загрузка…'; st.className = 'st';
+  try {
+    const data = await apiFetch(url);
+    let rows = data.data || [];
+    if (search) rows = rows.filter(r => r.Message?.toLowerCase().includes(search));
+    const lc = l => ({'error':'lvl-error','warn':'lvl-warn','warning':'lvl-warn','info':'lvl-info'}[l?.toLowerCase()] || 'lvl-info');
+    tb.innerHTML = rows.length
+      ? rows.map(r => {
+          const tid = r.TraceID
+            ? `<a class="trace-link" onclick="openTrace('${r.TraceID}')" title="Открыть трейс">${r.TraceID.slice(0,12)}…</a>`
+            : '—';
+          return `<tr>
+            <td class="mono">${fmtDateTime(r.Timestamp)}</td>
+            <td><span class="badge ${lc(r.Level)}">${r.Level||'?'}</span></td>
+            <td style="white-space:nowrap">${r.ServiceName}</td>
+            <td class="truncate" title="${(r.Message||'').replace(/"/g,'&quot;')}">${r.Message}</td>
+            <td>${tid}</td>
+          </tr>`;
+        }).join('')
+      : `<tr><td colspan="5" class="empty">Нет логов</td></tr>`;
+    st.textContent = `${rows.length} строк`; st.className = 'st ok';
+  } catch(e) {
+    st.textContent = e.message; st.className = 'st err';
+    tb.innerHTML = `<tr><td colspan="5" class="empty">${e.message}</td></tr>`;
+  }
+}
+
+// ── Traces ────────────────────────────────────────────────────────────────────
+async function loadTrace() {
+  const id = document.getElementById('t-id').value.trim();
+  const st = document.getElementById('t-st');
+  const body = document.getElementById('t-body');
+  if (!id) { st.textContent='Trace ID обязателен'; st.className='st err'; return; }
+  st.textContent = 'Загрузка…'; st.className = 'st';
+  try {
+    const data = await apiFetch(`/api/v1/traces/${encodeURIComponent(id)}`);
+    const spans = data.spans || [];
+    if (!spans.length) {
+      body.innerHTML = '<div class="empty">Спаны не найдены</div>';
+      st.textContent = '0 спанов'; st.className = 'st';
+      return;
+    }
+    // Build tree
+    const byId = {};
+    spans.forEach(s => byId[s.SpanID] = {...s, children:[]});
+    const roots = [];
+    spans.forEach(s => {
+      if (s.ParentSpanID && byId[s.ParentSpanID]) {
+        byId[s.ParentSpanID].children.push(byId[s.SpanID]);
+      } else {
+        roots.push(byId[s.SpanID]);
+      }
+    });
+
+    // Summary
+    const start = spans.reduce((m,s) => !m||new Date(s.StartTime)<new Date(m)?s.StartTime:m, null);
+    const end   = spans.reduce((m,s) => !m||new Date(s.EndTime)>new Date(m)?s.EndTime:m, null);
+    const hasError = spans.some(s => s.Status === 'error');
+    const haswarn  = spans.some(s => s.Status === 'warn');
+    const overallBadge = hasError ? 'lvl-error' : haswarn ? 'lvl-warn' : 'lvl-ok';
+    const overallLabel = hasError ? 'error' : haswarn ? 'warn' : 'ok';
+
+    let html = `<div class="trace-info">
+      <span><b>Trace ID:</b> <span class="mono color-accent">${id}</span></span>
+      <span><b>Спанов:</b> ${spans.length}</span>
+      <span><b>Длительность:</b> ${fmtDur(start, end)}</span>
+      <span><b>Начало:</b> ${fmtDateTime(start)}</span>
+      <span><b>Статус:</b> <span class="badge ${overallBadge}">${overallLabel}</span></span>
+    </div>`;
+
+    html += '<div class="table-wrap">';
+    function renderSpan(s, depth) {
+      const cls = s.Status==='error' ? 'lvl-error' : s.Status==='warn' ? 'lvl-warn' : 'lvl-ok';
+      const indent = depth ? '│  '.repeat(depth-1) + '└─ ' : '';
+      const attrs = Object.entries(s.Attributes||{}).slice(0,3)
+        .map(([k,v])=>`${k}: ${v}`).join(' · ');
+      let r = `<div class="span-row">
+        <span class="span-indent">${indent}</span>
+        <span class="span-name">${s.OperationName}</span>
+        <span class="span-svc">${s.ServiceName}</span>
+        <span class="badge ${cls}">${s.Status||'ok'}</span>
+        <span class="span-dur">${fmtDur(s.StartTime, s.EndTime)}</span>
+      </div>`;
+      if (attrs) r += `<div class="span-row" style="padding-top:0;padding-bottom:4px">
+        <span class="span-indent">${'   '.repeat(depth+1)}</span>
+        <span class="span-attrs">${attrs}</span>
+      </div>`;
+      (s.children||[]).forEach(c => r += renderSpan(c, depth+1));
+      return r;
+    }
+    html += roots.map(r => renderSpan(r, 0)).join('');
+    html += '</div>';
+
+    body.innerHTML = html;
+    st.textContent = `${spans.length} спанов`; st.className = 'st ok';
+  } catch(e) {
+    st.textContent = e.message; st.className = 'st err';
+    body.innerHTML = `<div class="empty">${e.message}</div>`;
+  }
+}
+
+// ── Thresholds ────────────────────────────────────────────────────────────────
+async function loadThresholds() {
+  try {
+    const d = await apiFetch('/api/v1/config/thresholds');
+    document.getElementById('thr-cpu').value  = d.cpu_warn;
+    document.getElementById('thr-cpu-v').textContent = d.cpu_warn + '%';
+    document.getElementById('thr-mem').value  = d.mem_warn;
+    document.getElementById('thr-mem-v').textContent = d.mem_warn + '%';
+    document.getElementById('thr-disk').value = d.disk_warn;
+    document.getElementById('thr-disk-v').textContent = d.disk_warn + '%';
+  } catch(_) {}
+}
+
+async function saveThresholds() {
+  const st = document.getElementById('thr-st');
+  const body = {
+    cpu_warn:  +document.getElementById('thr-cpu').value,
+    mem_warn:  +document.getElementById('thr-mem').value,
+    disk_warn: +document.getElementById('thr-disk').value,
+  };
+  st.textContent = 'Сохранение…'; st.className = 'st';
+  try {
+    const r = await fetch('/api/v1/config/thresholds', {
+      method: 'PUT',
+      headers: {...hdrs(), 'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    st.textContent = 'Сохранено — агенты обновятся за ~30 с'; st.className = 'st ok';
+    setTimeout(() => { st.textContent = ''; }, 4000);
+  } catch(e) { st.textContent = e.message; st.className = 'st err'; }
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+function boot() {
+  startServerStream();
+  setInterval(() => { renderSidebar(); renderOverview(); }, 5000);
+}
+
+if (API_KEY !== null) boot();
+</script>
+</body>
+</html>

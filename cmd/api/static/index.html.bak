@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monitoring</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#0f1117;color:#e2e8f0;height:100vh;display:flex;flex-direction:column}
+
+/* header */
+header{background:#1a1d27;border-bottom:1px solid #2d3148;padding:10px 20px;
+       display:flex;align-items:center;gap:10px;flex-shrink:0}
+header h1{font-size:14px;font-weight:600;color:#a78bfa}
+.dot{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 6px #22c55e;flex-shrink:0}
+.hdr-r{margin-left:auto;display:flex;align-items:center;gap:10px}
+.hdr-r span{font-size:11px;color:#64748b}
+.btn-sm{padding:4px 10px;border-radius:5px;font-size:11px;cursor:pointer;
+        border:1px solid #2d3148;background:#1e2130;color:#94a3b8}
+.btn-sm:hover{border-color:#a78bfa;color:#a78bfa}
+
+/* layout */
+.layout{display:flex;flex:1;overflow:hidden}
+
+/* sidebar */
+aside{width:200px;flex-shrink:0;background:#13151f;border-right:1px solid #2d3148;
+      display:flex;flex-direction:column;overflow:hidden}
+.aside-hdr{padding:12px 14px 8px;font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.5px;
+           display:flex;align-items:center;justify-content:space-between}
+.aside-hdr button{padding:2px 7px;border-radius:4px;font-size:10px;cursor:pointer;
+                  border:1px solid #2d3148;background:transparent;color:#64748b}
+.aside-hdr button:hover{border-color:#a78bfa;color:#a78bfa}
+.servers{flex:1;overflow-y:auto}
+.srv-item{padding:10px 14px;cursor:pointer;border-left:3px solid transparent;
+          transition:all .15s;display:flex;flex-direction:column;gap:3px}
+.srv-item:hover{background:#1a1d27;border-left-color:#4c4f6b}
+.srv-item.active{background:#1e1f35;border-left-color:#a78bfa}
+.srv-name{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srv-host{font-size:10px;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srv-bars{display:flex;gap:3px;margin-top:4px}
+.mini-bar-wrap{flex:1;height:4px;background:#1e2130;border-radius:2px;overflow:hidden}
+.mini-bar{height:100%;border-radius:2px;transition:width .4s}
+.srv-age{font-size:10px;color:#64748b;margin-top:2px}
+.srv-age.stale{color:#f87171}
+.no-srv{padding:20px 14px;font-size:11px;color:#475569;text-align:center}
+
+/* main */
+main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+/* tabs */
+.tabs{display:flex;background:#1a1d27;border-bottom:1px solid #2d3148;padding:0 20px;flex-shrink:0}
+.tab{padding:10px 16px;cursor:pointer;font-size:12px;color:#94a3b8;
+     border-bottom:2px solid transparent;transition:all .15s;user-select:none}
+.tab:hover{color:#e2e8f0}
+.tab.active{color:#a78bfa;border-bottom-color:#a78bfa}
+
+/* panels */
+.panels{flex:1;overflow-y:auto}
+.panel{display:none;padding:16px 20px}
+.panel.active{display:block}
+
+/* overview grid */
+.ov-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.ov-card{background:#1a1d27;border:1px solid #2d3148;border-radius:10px;padding:14px;cursor:pointer;transition:border-color .15s}
+.ov-card:hover{border-color:#a78bfa}
+.ov-card-hdr{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.ov-dot{width:7px;height:7px;border-radius:50%}
+.ov-name{font-size:13px;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ov-host{font-size:11px;color:#64748b}
+.ov-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.ov-stat{text-align:center}
+.ov-stat-label{font-size:9px;color:#475569;text-transform:uppercase}
+.ov-stat-val{font-size:16px;font-weight:700;font-family:monospace;color:#a78bfa;line-height:1.2}
+.ov-stat-val.warn{color:#fb923c}
+.ov-stat-val.crit{color:#f87171}
+.ov-bar{height:3px;background:#1e2130;border-radius:2px;margin-top:6px;overflow:hidden}
+.ov-bar-fill{height:100%;border-radius:2px;background:#a78bfa;transition:width .4s}
+
+/* dashboard panel */
+.dash-hdr{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.dash-svc{font-size:14px;font-weight:600;color:#a78bfa}
+.dash-host{font-size:12px;color:#64748b}
+.live-badge{padding:3px 8px;border-radius:12px;font-size:10px;font-weight:600;background:#052e16;color:#86efac;display:flex;align-items:center;gap:4px}
+.live-badge.off{background:#1e2130;color:#64748b}
+.live-pulse{width:6px;height:6px;border-radius:50%;background:#22c55e;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+.stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
+.stat{background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:12px 14px}
+.stat-label{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+.stat-val{font-size:26px;font-weight:700;font-family:monospace;color:#a78bfa;line-height:1}
+.stat-val.warn{color:#fb923c}
+.stat-val.crit{color:#f87171}
+.stat-unit{font-size:11px;color:#475569;margin-top:2px}
+
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:800px){.charts{grid-template-columns:1fr}}
+.chart-box{background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:14px}
+.chart-title{font-size:11px;color:#94a3b8;margin-bottom:10px;font-weight:500}
+.chart-wrap{position:relative;height:160px}
+
+/* table panel */
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:3px}
+.field label{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.4px}
+input[type=text],input[type=datetime-local],select{
+  background:#1e2130;border:1px solid #2d3148;color:#e2e8f0;
+  padding:6px 10px;border-radius:6px;font-size:12px;outline:none}
+input[type=text]:focus,input[type=datetime-local]:focus,select:focus{border-color:#a78bfa}
+input[type=text]{width:160px}
+input[type=datetime-local]{width:185px}
+.btn-fetch{padding:7px 14px;border-radius:6px;font-size:12px;cursor:pointer;
+           border:none;background:#7c3aed;color:#fff;font-weight:500}
+.btn-fetch:hover{background:#6d28d9}
+.st{font-size:11px;color:#64748b;align-self:center}
+.st.ok{color:#22c55e}
+.st.err{color:#f87171}
+
+.table-wrap{overflow-x:auto;border-radius:8px;border:1px solid #2d3148}
+table{width:100%;border-collapse:collapse;font-size:11px}
+thead{background:#1a1d27}
+th{padding:8px 12px;text-align:left;color:#64748b;font-weight:500;text-transform:uppercase;
+   font-size:10px;letter-spacing:.4px;border-bottom:1px solid #2d3148;white-space:nowrap}
+td{padding:7px 12px;border-bottom:1px solid #1e2130;vertical-align:top}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#1a1d27}
+.mono{font-family:monospace;font-size:11px;color:#94a3b8}
+.val{font-family:monospace;color:#a78bfa}
+.truncate{max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.empty{text-align:center;padding:36px;color:#475569;font-size:12px}
+
+.badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;text-transform:uppercase}
+.lvl-error{background:#450a0a;color:#fca5a5}
+.lvl-warn{background:#451a03;color:#fdba74}
+.lvl-info{background:#0c1a2e;color:#7dd3fc}
+.lvl-debug{background:#1e2130;color:#64748b}
+.lvl-ok{background:#052e16;color:#86efac}
+
+/* trace */
+.span-row{display:flex;align-items:center;gap:8px;padding:5px 12px;border-bottom:1px solid #1e2130;font-size:11px}
+.span-row:hover{background:#1a1d27}
+.span-indent{font-family:monospace;white-space:pre;color:#2d3148}
+.span-name{flex:1}
+.span-svc{color:#64748b;font-size:10px}
+.span-dur{font-family:monospace;color:#a78bfa;width:65px;text-align:right}
+
+/* auth overlay */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:100}
+.card{background:#1a1d27;border:1px solid #2d3148;border-radius:12px;padding:28px;width:320px;display:flex;flex-direction:column;gap:12px}
+.card h2{font-size:14px;font-weight:600}
+.card p{font-size:11px;color:#64748b}
+.card input{background:#1e2130;border:1px solid #2d3148;color:#e2e8f0;padding:8px 10px;border-radius:6px;font-size:12px;outline:none;width:100%}
+.card button{padding:8px;border-radius:6px;font-size:13px;cursor:pointer;border:none;background:#7c3aed;color:#fff;font-weight:500}
+</style>
+</head>
+<body>
+
+<div class="overlay" id="authOverlay">
+  <div class="card">
+    <h2>Monitoring</h2>
+    <p>Enter your API key. Leave empty if auth is disabled.</p>
+    <input type="password" id="apiKeyInput" placeholder="X-API-Key">
+    <button onclick="saveKey()">Connect</button>
+  </div>
+</div>
+
+<header>
+  <div class="dot" id="statusDot"></div>
+  <h1>Monitoring</h1>
+  <div class="hdr-r">
+    <span id="hdrStatus">—</span>
+    <button class="btn-sm" onclick="logout()">Change key</button>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- Sidebar: server list -->
+  <aside>
+    <div class="aside-hdr">
+      Servers
+      <button onclick="refreshServers()">↻</button>
+    </div>
+    <div class="servers" id="serverList">
+      <div class="no-srv">Loading…</div>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main>
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('overview')">Overview</div>
+      <div class="tab" onclick="switchTab('dashboard')">Dashboard</div>
+      <div class="tab" onclick="switchTab('metrics')">Metrics</div>
+      <div class="tab" onclick="switchTab('logs')">Logs</div>
+      <div class="tab" onclick="switchTab('traces')">Traces</div>
+      <div class="tab" onclick="switchTab('settings')">Settings</div>
+    </div>
+
+    <div class="panels">
+
+      <!-- Overview: all servers -->
+      <div class="panel active" id="panel-overview">
+        <div class="ov-grid" id="ovGrid">
+          <div class="empty">Waiting for servers…</div>
+        </div>
+      </div>
+
+      <!-- Dashboard: selected server real-time -->
+      <div class="panel" id="panel-dashboard">
+        <div class="dash-hdr">
+          <span class="dash-svc" id="d-title">—</span>
+          <span class="dash-host" id="d-host"></span>
+          <span class="live-badge off" id="liveBadge">
+            <span class="live-pulse" style="display:none" id="livePulse"></span>
+            <span id="liveText">Disconnected</span>
+          </span>
+        </div>
+        <div class="stat-row">
+          <div class="stat"><div class="stat-label">CPU</div><div class="stat-val" id="s-cpu">—</div><div class="stat-unit">%</div></div>
+          <div class="stat"><div class="stat-label">Memory</div><div class="stat-val" id="s-mem">—</div><div class="stat-unit">%</div></div>
+          <div class="stat"><div class="stat-label">Disk</div><div class="stat-val" id="s-disk">—</div><div class="stat-unit">%</div></div>
+          <div class="stat"><div class="stat-label">Net ↓</div><div class="stat-val" id="s-netr">—</div><div class="stat-unit">KB/s</div></div>
+          <div class="stat"><div class="stat-label">Net ↑</div><div class="stat-val" id="s-nets">—</div><div class="stat-unit">KB/s</div></div>
+        </div>
+        <div class="charts">
+          <div class="chart-box"><div class="chart-title">CPU %</div><div class="chart-wrap"><canvas id="c-cpu"></canvas></div></div>
+          <div class="chart-box"><div class="chart-title">Memory %</div><div class="chart-wrap"><canvas id="c-mem"></canvas></div></div>
+          <div class="chart-box"><div class="chart-title">Network KB/s</div><div class="chart-wrap"><canvas id="c-net"></canvas></div></div>
+          <div class="chart-box"><div class="chart-title">Disk %</div><div class="chart-wrap"><canvas id="c-disk"></canvas></div></div>
+        </div>
+      </div>
+
+      <!-- Metrics table -->
+      <div class="panel" id="panel-metrics">
+        <div class="controls">
+          <div class="field"><label>Service</label><input type="text" id="m-service" value="host-agent"></div>
+          <div class="field"><label>From</label><input type="datetime-local" id="m-from"></div>
+          <div class="field"><label>To</label><input type="datetime-local" id="m-to"></div>
+          <div class="field"><label>Filter</label><input type="text" id="m-filter" placeholder="cpu, mem…" style="width:120px"></div>
+          <button class="btn-fetch" onclick="loadMetrics()">Fetch</button>
+          <span class="st" id="m-st"></span>
+        </div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Time</th><th>Service</th><th>Metric</th><th>Value</th><th>Labels</th></tr></thead>
+          <tbody id="m-body"><tr><td colspan="5" class="empty">Press Fetch</td></tr></tbody></table>
+        </div>
+      </div>
+
+      <!-- Logs -->
+      <div class="panel" id="panel-logs">
+        <div class="controls">
+          <div class="field"><label>Service</label><input type="text" id="l-service"></div>
+          <div class="field"><label>Level</label>
+            <select id="l-level"><option value="">All</option><option>info</option><option>warn</option><option>error</option></select>
+          </div>
+          <div class="field"><label>Limit</label>
+            <select id="l-limit"><option>50</option><option selected>100</option><option>200</option><option>500</option></select>
+          </div>
+          <button class="btn-fetch" onclick="loadLogs()">Fetch</button>
+          <span class="st" id="l-st"></span>
+        </div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Time</th><th>Level</th><th>Service</th><th>Message</th><th>Trace ID</th></tr></thead>
+          <tbody id="l-body"><tr><td colspan="5" class="empty">Press Fetch</td></tr></tbody></table>
+        </div>
+      </div>
+
+      <!-- Settings -->
+      <div class="panel" id="panel-settings">
+        <div style="max-width:480px">
+          <h3 style="font-size:13px;font-weight:600;color:#a78bfa;margin-bottom:16px">Alert Thresholds</h3>
+          <p style="font-size:11px;color:#64748b;margin-bottom:20px">
+            Agents poll these values every 30 s and emit a <span class="badge lvl-warn">warn</span> log when exceeded.
+            A <span class="badge lvl-error">error</span> log fires if the collector becomes unreachable for 3+ batches.
+          </p>
+          <div style="display:flex;flex-direction:column;gap:18px">
+            <div class="field">
+              <label>CPU warn threshold (%)</label>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+                <input type="range" id="thr-cpu" min="1" max="100" value="85"
+                  style="flex:1;accent-color:#a78bfa" oninput="document.getElementById('thr-cpu-v').textContent=this.value">
+                <span id="thr-cpu-v" style="font-family:monospace;color:#a78bfa;width:28px">85</span>
+              </div>
+            </div>
+            <div class="field">
+              <label>Memory warn threshold (%)</label>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+                <input type="range" id="thr-mem" min="1" max="100" value="90"
+                  style="flex:1;accent-color:#34d399" oninput="document.getElementById('thr-mem-v').textContent=this.value">
+                <span id="thr-mem-v" style="font-family:monospace;color:#34d399;width:28px">90</span>
+              </div>
+            </div>
+            <div class="field">
+              <label>Disk warn threshold (%)</label>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+                <input type="range" id="thr-disk" min="1" max="100" value="90"
+                  style="flex:1;accent-color:#fb923c" oninput="document.getElementById('thr-disk-v').textContent=this.value">
+                <span id="thr-disk-v" style="font-family:monospace;color:#fb923c;width:28px">90</span>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:24px">
+            <button class="btn-fetch" onclick="saveThresholds()">Save</button>
+            <span class="st" id="thr-st"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Traces -->
+      <div class="panel" id="panel-traces">
+        <div class="controls">
+          <div class="field"><label>Trace ID</label><input type="text" id="t-id" style="width:320px" placeholder="abc123…"></div>
+          <button class="btn-fetch" onclick="loadTrace()">Fetch</button>
+          <span class="st" id="t-st"></span>
+        </div>
+        <div id="t-body"><div class="empty">Enter Trace ID and press Fetch</div></div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script>
+// ── Auth ──────────────────────────────────────────────────────────────────────
+let API_KEY = localStorage.getItem('apiKey');
+if (API_KEY !== null) document.getElementById('authOverlay').style.display = 'none';
+function saveKey() {
+  API_KEY = document.getElementById('apiKeyInput').value;
+  localStorage.setItem('apiKey', API_KEY);
+  document.getElementById('authOverlay').style.display = 'none';
+  boot();
+}
+function logout() { localStorage.removeItem('apiKey'); location.reload(); }
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+const TAB_NAMES = ['overview','dashboard','metrics','logs','traces','settings'];
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', TAB_NAMES[i] === name));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function hdrs() { return API_KEY ? {'X-API-Key': API_KEY} : {}; }
+async function apiFetch(url) {
+  const r = await fetch(url, { headers: hdrs() });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+function apiKey() { return API_KEY ? '&api_key=' + encodeURIComponent(API_KEY) : ''; }
+function fmtTime(ts) {
+  if (!ts) return '—';
+  return new Date(ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+function fmtAgo(ts) {
+  const sec = Math.floor((Date.now() - new Date(ts)) / 1000);
+  if (sec < 10) return 'just now';
+  if (sec < 60) return sec + 's ago';
+  if (sec < 3600) return Math.floor(sec/60) + 'm ago';
+  return Math.floor(sec/3600) + 'h ago';
+}
+function fmtDur(a,b) {
+  if (!a||!b) return '—';
+  const ms = new Date(b)-new Date(a);
+  return ms < 1000 ? ms+'ms' : (ms/1000).toFixed(2)+'s';
+}
+function toLocalDT(d) {
+  return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+}
+function toISO(s) { return s ? new Date(s).toISOString() : null; }
+function colorClass(v, w, c) { return v >= c ? 'crit' : v >= w ? 'warn' : ''; }
+function setVal(id, v, w, c) {
+  const el = document.getElementById(id);
+  el.textContent = typeof v === 'number' ? v.toFixed(1) : v;
+  el.className = 'stat-val ' + colorClass(v, w, c);
+}
+function srvColor(cpu, mem, lastSeen) {
+  const stale = (Date.now() - new Date(lastSeen)) > 30000;
+  if (stale) return '#f87171';
+  if (cpu > 90 || mem > 90) return '#f87171';
+  if (cpu > 70 || mem > 70) return '#fb923c';
+  return '#22c55e';
+}
+
+// ── Charts ────────────────────────────────────────────────────────────────────
+const COPTS = (max) => ({
+  responsive:true, maintainAspectRatio:false, animation:false,
+  plugins:{ legend:{ display:true, labels:{ color:'#94a3b8', font:{size:10}, boxWidth:10 } } },
+  scales:{
+    x:{ ticks:{color:'#475569',font:{size:10},maxTicksLimit:8}, grid:{color:'#1e2130'} },
+    y:{ ticks:{color:'#475569',font:{size:10}}, grid:{color:'#1e2130'}, min:0, ...(max?{max}:{}) }
+  }
+});
+const MAX_PTS = 60;
+function makeChart(id, datasets, max) {
+  return new Chart(document.getElementById(id), {
+    type:'line',
+    data:{ labels:[], datasets: datasets.map(d=>({
+      label:d.label, data:[], borderColor:d.color,
+      backgroundColor: d.color+'15', borderWidth:1.5,
+      pointRadius:1.5, fill: datasets.length===1, tension:0.3
+    }))},
+    options: COPTS(max)
+  });
+}
+const charts = {
+  cpu:  makeChart('c-cpu',  [{label:'CPU %',  color:'#a78bfa'}], 100),
+  mem:  makeChart('c-mem',  [{label:'Mem %',  color:'#34d399'}], 100),
+  net:  makeChart('c-net',  [{label:'↓ recv', color:'#60a5fa'},{label:'↑ sent',color:'#f472b6'}]),
+  disk: makeChart('c-disk', [{label:'Disk %', color:'#fb923c'}], 100),
+};
+function pushPt(chart, label, ...vals) {
+  chart.data.labels.push(label);
+  vals.forEach((v,i) => chart.data.datasets[i].data.push(+v.toFixed(2)));
+  if (chart.data.labels.length > MAX_PTS) {
+    chart.data.labels.shift();
+    chart.data.datasets.forEach(d => d.data.shift());
+  }
+  chart.update('none');
+}
+
+// ── Server list (sidebar + overview) ─────────────────────────────────────────
+let servers = {};   // name → ServiceInfo
+let srvES = null;
+let selectedSrv = null;
+
+function startServerStream() {
+  if (srvES) srvES.close();
+  srvES = new EventSource('/api/v1/stream/services?' + apiKey().slice(1));
+  srvES.addEventListener('services', e => {
+    const list = JSON.parse(e.data) || [];
+    list.forEach(s => servers[s.ServiceName] = s);
+    renderSidebar();
+    renderOverview();
+  });
+}
+
+function refreshServers() {
+  apiFetch('/api/v1/services').then(d => {
+    (d.data||[]).forEach(s => servers[s.ServiceName] = s);
+    renderSidebar(); renderOverview();
+  }).catch(()=>{});
+}
+
+function renderSidebar() {
+  const list = document.getElementById('serverList');
+  const arr = Object.values(servers);
+  if (!arr.length) { list.innerHTML = '<div class="no-srv">No servers yet</div>'; return; }
+
+  list.innerHTML = arr.map(s => {
+    const color = srvColor(s.CPU, s.Mem, s.LastSeen);
+    const stale = (Date.now() - new Date(s.LastSeen)) > 30000;
+    const cpuW  = Math.min(s.CPU, 100);
+    const memW  = Math.min(s.Mem, 100);
+    const diskW = Math.min(s.Disk, 100);
+    const active = selectedSrv === s.ServiceName ? 'active' : '';
+    return `<div class="srv-item ${active}" onclick="selectServer('${s.ServiceName}')">
+      <div style="display:flex;align-items:center;gap:6px">
+        <div class="ov-dot" style="background:${color};box-shadow:0 0 5px ${color};flex-shrink:0"></div>
+        <span class="srv-name">${s.ServiceName}</span>
+      </div>
+      <span class="srv-host">${s.Host || '—'}</span>
+      <div class="srv-bars">
+        <div class="mini-bar-wrap" title="CPU ${s.CPU.toFixed(1)}%"><div class="mini-bar" style="width:${cpuW}%;background:#a78bfa"></div></div>
+        <div class="mini-bar-wrap" title="Mem ${s.Mem.toFixed(1)}%"><div class="mini-bar" style="width:${memW}%;background:#34d399"></div></div>
+        <div class="mini-bar-wrap" title="Disk ${s.Disk.toFixed(1)}%"><div class="mini-bar" style="width:${diskW}%;background:#fb923c"></div></div>
+      </div>
+      <span class="srv-age ${stale?'stale':''}">${fmtAgo(s.LastSeen)}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderOverview() {
+  const grid = document.getElementById('ovGrid');
+  const arr = Object.values(servers);
+  if (!arr.length) { grid.innerHTML = '<div class="empty">No servers discovered yet</div>'; return; }
+
+  grid.innerHTML = arr.map(s => {
+    const color = srvColor(s.CPU, s.Mem, s.LastSeen);
+    const stale = (Date.now() - new Date(s.LastSeen)) > 30000;
+    return `<div class="ov-card" onclick="selectServer('${s.ServiceName}')">
+      <div class="ov-card-hdr">
+        <div class="ov-dot" style="background:${color};box-shadow:0 0 5px ${color}"></div>
+        <span class="ov-name">${s.ServiceName}</span>
+        <span class="ov-host">${s.Host||''}</span>
+      </div>
+      <div class="ov-stats">
+        <div class="ov-stat">
+          <div class="ov-stat-label">CPU</div>
+          <div class="ov-stat-val ${colorClass(s.CPU,70,90)}">${s.CPU.toFixed(1)}</div>
+          <div class="ov-bar"><div class="ov-bar-fill" style="width:${Math.min(s.CPU,100)}%;background:#a78bfa"></div></div>
+        </div>
+        <div class="ov-stat">
+          <div class="ov-stat-label">Mem</div>
+          <div class="ov-stat-val ${colorClass(s.Mem,70,90)}">${s.Mem.toFixed(1)}</div>
+          <div class="ov-bar"><div class="ov-bar-fill" style="width:${Math.min(s.Mem,100)}%;background:#34d399"></div></div>
+        </div>
+        <div class="ov-stat">
+          <div class="ov-stat-label">Disk</div>
+          <div class="ov-stat-val ${colorClass(s.Disk,80,95)}">${s.Disk.toFixed(1)}</div>
+          <div class="ov-bar"><div class="ov-bar-fill" style="width:${Math.min(s.Disk,100)}%;background:#fb923c"></div></div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:${stale?'#f87171':'#475569'};margin-top:8px">${fmtAgo(s.LastSeen)}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Per-server dashboard ──────────────────────────────────────────────────────
+let metricES = null;
+
+function selectServer(name) {
+  selectedSrv = name;
+  renderSidebar();
+  document.getElementById('m-service').value = name;
+  document.getElementById('l-service').value = name;
+  switchTab('dashboard');
+  openMetricStream(name);
+}
+
+function openMetricStream(svc) {
+  if (metricES) metricES.close();
+
+  // clear charts
+  Object.values(charts).forEach(ch => {
+    ch.data.labels = [];
+    ch.data.datasets.forEach(d => d.data = []);
+    ch.update('none');
+  });
+
+  document.getElementById('d-title').textContent = svc;
+  const s = servers[svc];
+  document.getElementById('d-host').textContent = s?.Host ? '@ ' + s.Host : '';
+
+  const badge = document.getElementById('liveBadge');
+  const pulse = document.getElementById('livePulse');
+  const liveText = document.getElementById('liveText');
+  badge.className = 'live-badge off';
+  liveText.textContent = 'Connecting…';
+  pulse.style.display = 'none';
+
+  const url = `/api/v1/stream?service=${encodeURIComponent(svc)}${apiKey()}`;
+  metricES = new EventSource(url);
+
+  metricES.addEventListener('snapshot', e => processRows(JSON.parse(e.data), true));
+  metricES.addEventListener('update',   e => processRows(JSON.parse(e.data), false));
+
+  metricES.onopen = () => {
+    badge.className = 'live-badge';
+    pulse.style.display = 'block';
+    liveText.textContent = 'Live';
+    document.getElementById('statusDot').style.cssText = 'background:#22c55e;box-shadow:0 0 6px #22c55e';
+    document.getElementById('hdrStatus').textContent = svc;
+  };
+  metricES.onerror = () => {
+    badge.className = 'live-badge off';
+    pulse.style.display = 'none';
+    liveText.textContent = 'Reconnecting…';
+    document.getElementById('statusDot').style.cssText = 'background:#f87171';
+  };
+}
+
+function processRows(rows, isSnapshot) {
+  if (!rows?.length) return;
+  const sorted = [...rows].sort((a,b) => new Date(a.Timestamp)-new Date(b.Timestamp));
+
+  if (isSnapshot) {
+    // deduplicate by (metric+second) to avoid flooding the chart
+    const seen = new Set();
+    for (const r of sorted) {
+      const key = r.MetricName + '|' + r.Timestamp.slice(0,19);
+      if (!seen.has(key)) { seen.add(key); addToCharts(r); }
+    }
+  } else {
+    // for live updates take latest of each metric
+    const latest = {};
+    for (const r of sorted) latest[r.MetricName] = r;
+    Object.values(latest).forEach(r => addToCharts(r));
+  }
+
+  // update stat cards with latest values
+  const last = {};
+  for (const r of sorted) last[r.MetricName] = r.Value;
+
+  if ('cpu_usage_percent'  in last) setVal('s-cpu',  last.cpu_usage_percent,  70, 90);
+  if ('mem_usage_percent'  in last) setVal('s-mem',  last.mem_usage_percent,  70, 90);
+  if ('disk_usage_percent' in last) setVal('s-disk', last.disk_usage_percent, 80, 95);
+  if ('net_bytes_recv_per_sec' in last)
+    document.getElementById('s-netr').textContent = (last.net_bytes_recv_per_sec/1024).toFixed(1);
+  if ('net_bytes_sent_per_sec' in last)
+    document.getElementById('s-nets').textContent = (last.net_bytes_sent_per_sec/1024).toFixed(1);
+}
+
+function addToCharts(r) {
+  const label = fmtTime(r.Timestamp);
+  switch (r.MetricName) {
+    case 'cpu_usage_percent':  pushPt(charts.cpu,  label, r.Value); break;
+    case 'mem_usage_percent':  pushPt(charts.mem,  label, r.Value); break;
+    case 'disk_usage_percent': pushPt(charts.disk, label, r.Value); break;
+    case 'net_bytes_recv_per_sec':
+      charts.net._recv = { label, v: r.Value / 1024 }; break;
+    case 'net_bytes_sent_per_sec':
+      if (charts.net._recv) pushPt(charts.net, charts.net._recv.label, charts.net._recv.v, r.Value/1024);
+      break;
+  }
+}
+
+// ── Metrics table ─────────────────────────────────────────────────────────────
+(function initDates() {
+  const now = new Date();
+  document.getElementById('m-from').value = toLocalDT(new Date(now - 3600000));
+  document.getElementById('m-to').value   = toLocalDT(now);
+})();
+
+async function loadMetrics() {
+  const svc = document.getElementById('m-service').value.trim();
+  const filter = document.getElementById('m-filter').value.trim().toLowerCase();
+  const st = document.getElementById('m-st'), tb = document.getElementById('m-body');
+  if (!svc) { st.textContent='Service required'; st.className='st err'; return; }
+  let url = `/api/v1/metrics?service=${encodeURIComponent(svc)}`;
+  const f = toISO(document.getElementById('m-from').value);
+  const t = toISO(document.getElementById('m-to').value);
+  if (f) url += `&from=${encodeURIComponent(f)}`;
+  if (t) url += `&to=${encodeURIComponent(t)}`;
+  st.textContent='Loading…'; st.className='st';
+  try {
+    const data = await apiFetch(url);
+    let rows = data.data||[];
+    if (filter) rows = rows.filter(r => r.MetricName?.toLowerCase().includes(filter));
+    tb.innerHTML = rows.length ? rows.map(r=>`<tr>
+      <td class="mono">${fmtTime(r.Timestamp)}</td><td>${r.ServiceName}</td>
+      <td class="mono">${r.MetricName}</td>
+      <td class="val">${typeof r.Value==='number'?r.Value.toFixed(4):r.Value}</td>
+      <td>${Object.entries(r.Labels||{}).map(([k,v])=>`<span class="mono">${k}=<b>${v}</b></span>`).join(' ')}</td>
+    </tr>`).join('') : `<tr><td colspan="5" class="empty">No data</td></tr>`;
+    st.textContent=`${rows.length} rows`; st.className='st ok';
+  } catch(e) { st.textContent=e.message; st.className='st err';
+    tb.innerHTML=`<tr><td colspan="5" class="empty">${e.message}</td></tr>`; }
+}
+
+// ── Logs ──────────────────────────────────────────────────────────────────────
+async function loadLogs() {
+  const svc = document.getElementById('l-service').value.trim();
+  const level = document.getElementById('l-level').value;
+  const limit = document.getElementById('l-limit').value;
+  const st = document.getElementById('l-st'), tb = document.getElementById('l-body');
+  if (!svc) { st.textContent='Service required'; st.className='st err'; return; }
+  let url = `/api/v1/logs?service=${encodeURIComponent(svc)}&limit=${limit}`;
+  if (level) url += `&level=${level}`;
+  st.textContent='Loading…'; st.className='st';
+  try {
+    const data = await apiFetch(url);
+    const rows = data.data||[];
+    const lc = l=>({'error':'lvl-error','warn':'lvl-warn','warning':'lvl-warn','info':'lvl-info','debug':'lvl-debug'}[l?.toLowerCase()]||'lvl-debug');
+    tb.innerHTML = rows.length ? rows.map(r=>`<tr>
+      <td class="mono">${fmtTime(r.Timestamp)}</td>
+      <td><span class="badge ${lc(r.Level)}">${r.Level||'?'}</span></td>
+      <td>${r.ServiceName}</td>
+      <td class="truncate" title="${(r.Message||'').replace(/"/g,'&quot;')}">${r.Message}</td>
+      <td class="mono truncate">${r.TraceID||'—'}</td>
+    </tr>`).join('') : `<tr><td colspan="5" class="empty">No logs</td></tr>`;
+    st.textContent=`${rows.length} rows`; st.className='st ok';
+  } catch(e) { st.textContent=e.message; st.className='st err';
+    tb.innerHTML=`<tr><td colspan="5" class="empty">${e.message}</td></tr>`; }
+}
+
+// ── Traces ────────────────────────────────────────────────────────────────────
+async function loadTrace() {
+  const id = document.getElementById('t-id').value.trim();
+  const st = document.getElementById('t-st'), body = document.getElementById('t-body');
+  if (!id) { st.textContent='Trace ID required'; st.className='st err'; return; }
+  st.textContent='Loading…'; st.className='st';
+  try {
+    const data = await apiFetch(`/api/v1/traces/${encodeURIComponent(id)}`);
+    const spans = data.spans||[];
+    const byId = {};
+    spans.forEach(s=>byId[s.SpanID]={...s,children:[]});
+    const roots=[];
+    spans.forEach(s=>s.ParentSpanID&&byId[s.ParentSpanID]?byId[s.ParentSpanID].children.push(byId[s.SpanID]):roots.push(byId[s.SpanID]));
+    function rs(s,d){
+      const cls=s.Status==='ok'?'lvl-ok':'lvl-error';
+      let h=`<div class="span-row"><span class="span-indent">${'  '.repeat(d)}${d?'└─ ':''}</span>
+        <span class="span-name">${s.OperationName}</span><span class="span-svc">${s.ServiceName}</span>
+        <span class="badge ${cls}">${s.Status}</span><span class="span-dur">${fmtDur(s.StartTime,s.EndTime)}</span></div>`;
+      (s.children||[]).forEach(c=>h+=rs(c,d+1)); return h;
+    }
+    body.innerHTML=`<div style="margin-bottom:8px;font-size:11px;color:#64748b">${spans.length} spans · <span class="mono" style="color:#a78bfa">${id}</span></div>
+      <div class="table-wrap">${roots.map(r=>rs(r,0)).join('')}</div>`;
+    st.textContent=`${spans.length} spans`; st.className='st ok';
+  } catch(e) { st.textContent=e.message; st.className='st err';
+    body.innerHTML=`<div class="empty">${e.message}</div>`; }
+}
+
+// ── Thresholds ────────────────────────────────────────────────────────────────
+async function loadThresholds() {
+  try {
+    const d = await apiFetch('/api/v1/config/thresholds');
+    document.getElementById('thr-cpu').value  = d.cpu_warn;
+    document.getElementById('thr-cpu-v').textContent = d.cpu_warn;
+    document.getElementById('thr-mem').value  = d.mem_warn;
+    document.getElementById('thr-mem-v').textContent = d.mem_warn;
+    document.getElementById('thr-disk').value = d.disk_warn;
+    document.getElementById('thr-disk-v').textContent = d.disk_warn;
+  } catch(_) {}
+}
+
+async function saveThresholds() {
+  const st = document.getElementById('thr-st');
+  const body = {
+    cpu_warn:  +document.getElementById('thr-cpu').value,
+    mem_warn:  +document.getElementById('thr-mem').value,
+    disk_warn: +document.getElementById('thr-disk').value,
+  };
+  st.textContent = 'Saving…'; st.className = 'st';
+  try {
+    const r = await fetch('/api/v1/config/thresholds', {
+      method: 'PUT', headers: {...hdrs(), 'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    st.textContent = 'Saved — agents will pick up within 30 s'; st.className = 'st ok';
+  } catch(e) { st.textContent = e.message; st.className = 'st err'; }
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+function boot() {
+  startServerStream();
+  loadThresholds();
+  setInterval(() => { renderSidebar(); renderOverview(); }, 5000);
+}
+
+if (API_KEY !== null) boot();
+</script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  namespace: monitoring
+  annotations:
+    # helm hook или запускать вручную перед деплоем сервисов
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h postgres -U monitoring; do
+                echo "waiting for postgres..."; sleep 2
+              done
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: password
+      containers:
+        - name: migrate
+          image: migrate/migrate:v4.18.1
+          args:
+            - "-path=/migrations"
+            - "-database=$(POSTGRES_URL)"
+            - "up"
+          env:
+            - name: POSTGRES_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: url
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+      volumes:
+        - name: migrations
+          configMap:
+            name: db-migrations
+---
+# Миграции упакованы в ConfigMap чтобы не зависеть от образа сервисов
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-migrations
+  namespace: monitoring
+binaryData: {}
+# Заполняется через kustomize или CI:
+#   kubectl create configmap db-migrations \
+#     --from-file=migrations/ -n monitoring --dry-run=client -o yaml

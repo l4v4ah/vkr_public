@@ -1,0 +1,37 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: telemetry-retention
+  namespace: monitoring
+spec:
+  # Каждый день в 03:00 UTC
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: cleanup
+              image: postgres:16-alpine
+              command:
+                - sh
+                - -c
+                - |
+                  psql "$POSTGRES_URL" -c "SELECT * FROM cleanup_old_telemetry(30);"
+              env:
+                - name: POSTGRES_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-secret
+                      key: url
+              resources:
+                requests:
+                  cpu: "50m"
+                  memory: "32Mi"
+                limits:
+                  cpu: "100m"
+                  memory: "64Mi"

@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package telemetry;
+
+option go_package = "github.com/slava-kov/monitoring-system/proto/telemetry";
+
+import "google/protobuf/timestamp.proto";
+
+// MetricPoint represents a single numerical measurement from a service.
+message MetricPoint {
+  string service_name = 1;
+  string metric_name  = 2;
+  double value        = 3;
+  map<string, string> labels = 4;
+  google.protobuf.Timestamp timestamp = 5;
+}
+
+// LogEntry represents a structured log record.
+message LogEntry {
+  string service_name = 1;
+  string level        = 2;
+  string message      = 3;
+  string trace_id     = 4;
+  map<string, string> fields = 5;
+  google.protobuf.Timestamp timestamp = 6;
+}
+
+// TraceSpan represents a distributed tracing span.
+message TraceSpan {
+  string trace_id        = 1;
+  string span_id         = 2;
+  string parent_span_id  = 3;
+  string service_name    = 4;
+  string operation_name  = 5;
+  google.protobuf.Timestamp start_time = 6;
+  google.protobuf.Timestamp end_time   = 7;
+  string status          = 8;
+  map<string, string> attributes = 9;
+}
+
+// CollectorService is the internal gRPC interface used by the collector
+// to forward telemetry batches to the aggregator in a strongly-typed contract.
+service CollectorService {
+  rpc SendMetrics(SendMetricsRequest) returns (SendMetricsResponse);
+  rpc SendLogs(SendLogsRequest)       returns (SendLogsResponse);
+  rpc SendSpans(SendSpansRequest)     returns (SendSpansResponse);
+}
+
+message SendMetricsRequest  { repeated MetricPoint metrics = 1; }
+message SendMetricsResponse { uint32 accepted = 1; }
+
+message SendLogsRequest     { repeated LogEntry logs = 1; }
+message SendLogsResponse    { uint32 accepted = 1; }
+
+message SendSpansRequest    { repeated TraceSpan spans = 1; }
+message SendSpansResponse   { uint32 accepted = 1; }

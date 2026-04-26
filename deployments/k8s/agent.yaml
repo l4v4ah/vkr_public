@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: agent
+  namespace: monitoring
+  labels:
+    app: agent
+spec:
+  selector:
+    matchLabels:
+      app: agent
+  template:
+    metadata:
+      labels:
+        app: agent
+    spec:
+      # hostPID + hostNetwork нужны для корректного чтения метрик хоста
+      hostPID: true
+      hostNetwork: false
+      containers:
+        - name: agent
+          image: monitoring/agent:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: COLLECTOR_GRPC
+              value: "collector:9090"
+            - name: SERVICE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName   # имя ноды как service_name
+            - name: LOG_LEVEL
+              value: "info"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
